@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#111827">
+<title>Kamera Saat Hesaplayıcı</title>
+<style>
+:root{color-scheme:dark;--bg:#0b1120;--panel:#121c2e;--panel2:#18243a;--line:#2b3a52;--text:#f3f6fc;--muted:#a7b4c8;--accent:#78aaff;--good:#b7d5ff}
+*{box-sizing:border-box}
+body{margin:0;background:linear-gradient(160deg,#0b1120,#111a2b 65%,#0b1120);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:var(--text);min-height:100vh;padding:24px 14px calc(28px + env(safe-area-inset-bottom))}
+main{max-width:620px;margin:0 auto}
+header{margin:8px 0 22px}
+.eyebrow{font-size:12px;letter-spacing:.13em;text-transform:uppercase;color:var(--accent);font-weight:700}
+h1{font-size:clamp(26px,7vw,36px);line-height:1.12;margin:9px 0}
+.subtitle{color:var(--muted);line-height:1.5;margin:0}
+.card{background:rgba(18,28,46,.96);border:1px solid var(--line);border-radius:18px;padding:18px;margin:14px 0;box-shadow:0 12px 30px #0002}
+.card h2{font-size:17px;margin:0 0 6px}
+.hint{font-size:13px;line-height:1.45;color:var(--muted);margin:0 0 15px}
+.fields{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+label{display:block;font-size:13px;color:var(--muted);margin-bottom:7px}
+input{width:100%;min-width:0;background:#0b1424;color:var(--text);border:1px solid #35465f;border-radius:10px;padding:12px 10px;font:inherit;font-size:16px;min-height:46px}
+input:focus{outline:2px solid var(--accent);outline-offset:1px}
+button{width:100%;border:0;border-radius:12px;padding:14px 16px;font-size:16px;font-weight:700;cursor:pointer}
+.primary{background:var(--accent);color:#071326;margin-top:4px}
+.secondary{background:var(--panel2);color:var(--text);border:1px solid var(--line);margin-top:10px}
+.result{display:none}
+.result.show{display:block}
+.result .big{font-size:clamp(23px,6vw,31px);font-weight:800;line-height:1.2;letter-spacing:-.02em;margin:8px 0 14px;overflow-wrap:anywhere}
+.result .label{font-size:13px;color:var(--muted);margin-top:10px}
+.pill{display:inline-block;background:#1d3555;color:#cfe1ff;border-radius:999px;padding:6px 10px;font-size:12px;font-weight:700}
+.note{font-size:12px;color:var(--muted);line-height:1.5;margin:18px 4px}
+.error{display:none;color:#ffd1d1;background:#3b1d29;border:1px solid #743344;border-radius:10px;padding:11px;font-size:14px;margin-top:12px}
+@media(max-width:390px){.card{padding:15px}.fields{gap:9px}input{padding:11px 8px}}
+</style>
+</head>
+<body>
+<main>
+<header>
+<div class="eyebrow">Zaman düzeltme aracı</div>
+<h1>Kamera Saat Hesaplayıcı</h1>
+<p class="subtitle">Kamerada olayın hangi tarih ve saatte göründüğünü hesapla.</p>
+</header>
+
+<section class="card">
+<h2>1. Gerçek tarih ve saat</h2>
+<p class="hint">Kameraya bakarken aynı anda geçerli olan doğru tarih ve saat.</p>
+<div class="fields">
+<div><label for="realDate">Gerçek tarih</label><input id="realDate" type="date"></div>
+<div><label for="realTime">Gerçek saat</label><input id="realTime" type="time" step="60"></div>
+</div>
+</section>
+
+<section class="card">
+<h2>2. Kamera tarih ve saat</h2>
+<p class="hint">Aynı anda kameranın görüntüsünde yazan tarih ve saat.</p>
+<div class="fields">
+<div><label for="camDate">Kamera tarihi</label><input id="camDate" type="date"></div>
+<div><label for="camTime">Kamera saati</label><input id="camTime" type="time" step="60"></div>
+</div>
+</section>
+
+<section class="card">
+<h2>3. Olay tarih ve saat</h2>
+<p class="hint">Olayın gerçekte gerçekleştiği bilinen veya tahmin edilen tarih ve saat.</p>
+<div class="fields">
+<div><label for="eventDate">Olay tarihi</label><input id="eventDate" type="date"></div>
+<div><label for="eventTime">Olay saati</label><input id="eventTime" type="time" step="60"></div>
+</div>
+</section>
+
+<button class="primary" id="calculate">Kamera saatini hesapla</button>
+<div class="error" id="error" role="alert"></div>
+
+<section class="card result" id="result" aria-live="polite">
+<span class="pill" id="direction">HESAPLAMA SONUCU</span>
+<div class="label">Kamera saati, gerçek saate göre</div>
+<div class="big" id="offset"></div>
+<div class="label">Olayı kamerada araman gereken tarih ve saat</div>
+<div class="big" id="target"></div>
+<button class="secondary" id="copy">Sonucu kopyala</button>
+</section>
+
+<p class="note">Hesaplama, gerçek saat ile kamera saatinin aynı anda karşılaştırıldığı varsayımıyla yapılır. Kamera saatindeki farkın olay anında değişmediği kabul edilir.</p>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+const pad = n => String(n).padStart(2, "0");
+const localInput = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+const timeInput = d => `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+const parseLocal = (date, time) => {
+  if (!date || !time) return NaN;
+  const [y,m,d] = date.split("-").map(Number);
+  const [hh,mm] = time.split(":").map(Number);
+  const value = new Date(y,m-1,d,hh,mm,0,0);
+  if (value.getFullYear()!==y || value.getMonth()!==m-1 || value.getDate()!==d || value.getHours()!==hh || value.getMinutes()!==mm) return NaN;
+  return value.getTime();
+};
+const formatDateTime = ms => {
+  const d = new Date(ms);
+  return `${pad(d.getDate())}.${pad(d.getMonth()+1)}.${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+};
+const fmtDuration = ms => {
+  let mins = Math.round(Math.abs(ms)/60000);
+  const days = Math.floor(mins/1440); mins %= 1440;
+  const hours = Math.floor(mins/60); mins %= 60;
+  const parts = [];
+  if(days) parts.push(`${days} gün`);
+  if(hours) parts.push(`${hours} saat`);
+  if(mins || !parts.length) parts.push(`${mins} dakika`);
+  return parts.join(" ");
+};
+const now = new Date();
+$("realDate").value = localInput(now);
+$("realTime").value = timeInput(now);
+$("camDate").value = localInput(now);
+$("camTime").value = timeInput(now);
+$("eventDate").value = localInput(now);
+$("eventTime").value = timeInput(now);
+
+$("calculate").addEventListener("click", () => {
+  const real = parseLocal($("realDate").value, $("realTime").value);
+  const cam = parseLocal($("camDate").value, $("camTime").value);
+  const event = parseLocal($("eventDate").value, $("eventTime").value);
+  const err = $("error");
+  err.style.display = "none";
+  $("result").classList.remove("show");
+  if (![real,cam,event].every(Number.isFinite)) {
+    err.textContent = "Lütfen üç bölümdeki tarih ve saatlerin tamamını doğru biçimde gir.";
+    err.style.display = "block";
+    return;
+  }
+  const offset = cam-real;
+  const target = event+offset;
+  $("direction").textContent = offset < 0 ? "KAMERA GERİDE" : offset > 0 ? "KAMERA İLERİDE" : "SAATLER AYNI";
+  $("offset").textContent = offset === 0 ? "Fark yok" : `${fmtDuration(offset)} ${offset < 0 ? "geri" : "ileri"}`;
+  $("target").textContent = formatDateTime(target);
+  $("result").classList.add("show");
+  $("copy").onclick = async () => {
+    const text = `Kamera saat farkı: ${offset === 0 ? "Fark yok" : fmtDuration(offset)+" "+(offset < 0 ? "geri" : "ileri")}\nOlayın gerçek tarihi ve saati: ${formatDateTime(event)}\nKamerada aranacak tarih ve saat: ${formatDateTime(target)}`;
+    try {
+      await navigator.clipboard.writeText(text);
+      $("copy").textContent = "Kopyalandı";
+      setTimeout(() => $("copy").textContent = "Sonucu kopyala", 1800);
+    } catch {
+      const area = document.createElement("textarea");
+      area.value = text; document.body.appendChild(area); area.select();
+      document.execCommand("copy"); area.remove();
+      $("copy").textContent = "Kopyalandı";
+      setTimeout(() => $("copy").textContent = "Sonucu kopyala", 1800);
+    }
+  };
+});
+</script>
+</body>
+</html>
